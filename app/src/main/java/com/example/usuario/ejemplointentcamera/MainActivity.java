@@ -4,10 +4,11 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Environment;
+import android.os.StrictMode;
 import android.provider.MediaStore;
-import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
@@ -24,21 +25,27 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 public class MainActivity extends AppCompatActivity {
-    static int VENGO_DE_LA_CAMARA = 1;
-    static int VENGO_DE_LA_CAMARA_CON_FICHERO = 2;
-    static final int PEDI_PERMISOS_PARA_ESCRIBIR = 1;
 
-Button captura;
-Button captura2;
+    /*Mirar :
+    -https://developer.android.com/guide/components/intents-common?hl=es-419
+    -https://developer.android.com/training/permissions/requesting?hl=es-419
+    */
+
+    static final int VENGO_DE_LA_CAMARA = 1;
+    static final int VENGO_DE_LA_CAMARA_CON_FICHERO = 2;
+    static final int PEDI_PERMISOS_DE_ESCRITURA = 2;
+Button captura, captura2;
 ImageView imageViewFoto;
-String nombre_fichero;
+String rutaFotoActual;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        StrictMode.VmPolicy.Builder builder = new StrictMode.VmPolicy.Builder();
+        StrictMode.setVmPolicy(builder.build());
         captura = findViewById(R.id.buttonCaptura);
-        imageViewFoto = findViewById(R.id.imageViewFoto);
         captura2 = findViewById(R.id.buttonCaptura2);
+        imageViewFoto = findViewById(R.id.imageViewFoto);
 
         captura.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -55,41 +62,17 @@ String nombre_fichero;
 
             }
         });
-
-
-
         captura2.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                pedirPermisoDeEscrituraYHagoFoto();
+
+                pedirPermisoParaEscribirYHacerFoto();
+
 
             }
         });
-
-
-
     }
 
-    void hacerFoto(){
-        Intent haceFoto = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        if (haceFoto.resolveActivity(getPackageManager())!=null){
-
-            File ficheroFoto = null;
-            try {
-                ficheroFoto = crearFicheroDeImagen();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
-            if (ficheroFoto!=null){
-                haceFoto.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(ficheroFoto));
-                startActivityForResult(haceFoto,VENGO_DE_LA_CAMARA_CON_FICHERO);
-            }
-
-        }else{
-            Toast.makeText(MainActivity.this, "Necesito un programa de hacer fotos.", Toast.LENGTH_SHORT).show();
-        }
-    }
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
 
@@ -97,61 +80,86 @@ String nombre_fichero;
             Bundle extras = data.getExtras();
             Bitmap foto = (Bitmap) extras.get("data");
             imageViewFoto.setImageBitmap(foto);
+        }else if ((requestCode == VENGO_DE_LA_CAMARA_CON_FICHERO) && (resultCode == RESULT_OK)){
+            //He hecho la foto y la he guardado, así que la foto estará en  rutaFotoActual
+            imageViewFoto.setImageBitmap(BitmapFactory.decodeFile(rutaFotoActual));
+
         }
-        if ((requestCode == VENGO_DE_LA_CAMARA_CON_FICHERO) && (resultCode == RESULT_OK)){
-            Bundle extras = data.getExtras();
-            Bitmap foto = (Bitmap) extras.get("data");
-            imageViewFoto.setImageBitmap(foto);
+
+        }
+    public void capturarFoto( ) {
+        Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        File ficheroFoto = null;
+        try {
+            ficheroFoto = crearFicheroImagen();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        intent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(ficheroFoto));
+        if (intent.resolveActivity(getPackageManager()) != null) {
+            startActivityForResult(intent, VENGO_DE_LA_CAMARA_CON_FICHERO);
+        }else{
+            Toast.makeText(this, "No tengo programa o cámara", Toast.LENGTH_SHORT).show();
         }
     }
+    File crearFicheroImagen() throws IOException {
+        String fechaYHora = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        String nombreFichero = "Ejemplo_"+fechaYHora;
+        File carpetaParaFotos = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+        File imagen = File.createTempFile(nombreFichero, ".jpg", carpetaParaFotos);
+        rutaFotoActual = imagen.getAbsolutePath();
+        return imagen;
+    }
 
-    void pedirPermisoDeEscrituraYHagoFoto(){
+
+    void pedirPermisoParaEscribirYHacerFoto(){
         if (ContextCompat.checkSelfPermission(this,
                 Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 != PackageManager.PERMISSION_GRANTED) {
 
+            // Should we show an explanation?
             if (ActivityCompat.shouldShowRequestPermissionRationale(this,
                     Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
 
-
+                // Aquí puedo explicar para qué quiero el permiso
 
             } else {
+
+                // No explicamos nada y pedimos el permiso
+
                 ActivityCompat.requestPermissions(this,
                         new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
-                        PEDI_PERMISOS_PARA_ESCRIBIR);
+                        PEDI_PERMISOS_DE_ESCRITURA);
+
+                // El resultado de la petición se recupera en onRequestPermissionsResult
             }
-        }else{
-            hacerFoto();
-
+        }else{//Tengo los permisos
+            capturarFoto();
         }
-
-        }
+    }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode,
+                                           String permissions[], int[] grantResults) {
         switch (requestCode) {
-            case PEDI_PERMISOS_PARA_ESCRIBIR:
-                // If request is cancelled, the result arrays are empty.
+            case PEDI_PERMISOS_DE_ESCRITURA: {
+
                 if (grantResults.length > 0
                         && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
 
-                    hacerFoto();
+                    // Tengo los permisos: hago la foto:
+
+                    this.capturarFoto();
 
                 } else {
 
-                    Toast.makeText(this, "Sin permisos, no funciona.", Toast.LENGTH_SHORT).show();
+                    //No tengo permisos: Le digo que no se puede hacer nada
+                    Toast.makeText(this, "Sin permisos de escritura no puedo guardar la imagen en alta resolución.", Toast.LENGTH_SHORT).show();
                 }
                 return;
             }
 
+           //Pondría aquí más "case" si tuviera que pedir más permisos.
+        }
     }
-
-    File crearFicheroDeImagen() throws IOException {
-        String fecha = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-        String nombreFichero = "MisFotos_"+fecha;
-        File carpetaDeFotos = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-        File image = File.createTempFile(nombreFichero, ".jpg",carpetaDeFotos);
-        return image;
-    }
-
 }
